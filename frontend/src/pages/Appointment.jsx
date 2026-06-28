@@ -79,7 +79,10 @@ const Appointment = () => {
         currentDate.setMinutes(currentDate.getMinutes() + 30);
       }
 
-      setDocSlots((prev) => [...prev, timeSlots]);
+      // ✅ Only push days that have at least 1 available slot
+      if (timeSlots.length > 0) {
+        setDocSlots((prev) => [...prev, timeSlots]);
+      }
     }
   };
 
@@ -165,7 +168,6 @@ const Appointment = () => {
                   </span>
                 </div>
 
-                {/* Availability badge */}
                 <div className="mt-2">
                   {docInfo.available ? (
                     <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 font-medium bg-emerald-50 px-2.5 py-0.5 rounded-full">
@@ -234,56 +236,66 @@ const Appointment = () => {
                   Find Another Doctor
                 </button>
               </div>
+            ) : docSlots.length === 0 ? (
+              // ✅ No slots available at all
+              <div className="flex flex-col items-center justify-center py-10 gap-3 text-center">
+                <div className="text-4xl">📅</div>
+                <p className="text-base font-semibold text-gray-700">
+                  No slots available
+                </p>
+                <p className="text-sm text-gray-400">
+                  There are no available time slots for the next 7 days. Please
+                  check back later.
+                </p>
+              </div>
             ) : (
               <>
-                {/* Date picker */}
+                {/* Date picker — ✅ only days with slots are shown */}
                 <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-1 px-1">
-                  {docSlots.length > 0 &&
-                    docSlots.map((item, index) => (
-                      <button
-                        key={index}
-                        onClick={() => {
-                          setSlotIndex(index);
-                          setSlotTime("");
-                        }}
-                        className={`flex flex-col items-center justify-center min-w-[58px] h-[70px] rounded-2xl shrink-0 transition-all duration-200 border
-                          ${
-                            slotIndex === index
-                              ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100"
-                              : "bg-gray-50 text-gray-500 border-gray-100 hover:border-indigo-200 hover:bg-indigo-50"
-                          }`}
-                      >
-                        <span className="text-[10px] font-semibold tracking-wider uppercase opacity-70">
-                          {item[0] && daysOfWeek[item[0].datetime.getDay()]}
-                        </span>
-                        <span className="text-lg font-bold leading-none mt-0.5">
-                          {item[0] && item[0].datetime.getDate()}
-                        </span>
-                      </button>
-                    ))}
+                  {docSlots.map((item, index) => (
+                    <button
+                      key={index}
+                      onClick={() => {
+                        setSlotIndex(index);
+                        setSlotTime("");
+                      }}
+                      className={`flex flex-col items-center justify-center min-w-[58px] h-[70px] rounded-2xl shrink-0 transition-all duration-200 border
+                        ${
+                          slotIndex === index
+                            ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100"
+                            : "bg-gray-50 text-gray-500 border-gray-100 hover:border-indigo-200 hover:bg-indigo-50"
+                        }`}
+                    >
+                      <span className="text-[10px] font-semibold tracking-wider uppercase opacity-70">
+                        {item[0] && daysOfWeek[item[0].datetime.getDay()]}
+                      </span>
+                      <span className="text-lg font-bold leading-none mt-0.5">
+                        {item[0] && item[0].datetime.getDate()}
+                      </span>
+                    </button>
+                  ))}
                 </div>
 
-                {/* Time slots */}
+                {/* Time slots — ✅ 3 per row on all screen sizes */}
                 <div className="mt-5">
                   <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">
                     Available times
                   </p>
-                  <div className="flex flex-wrap gap-2">
-                    {docSlots.length > 0 &&
-                      docSlots[slotIndex].map((item, index) => (
-                        <button
-                          key={index}
-                          onClick={() => setSlotTime(item.time)}
-                          className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-150 border
-                            ${
-                              item.time === slotTime
-                                ? "bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-100"
-                                : "text-gray-500 border-gray-200 bg-white hover:border-indigo-300 hover:text-indigo-600"
-                            }`}
-                        >
-                          {item.time.toLowerCase()}
-                        </button>
-                      ))}
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                    {docSlots[slotIndex].map((item, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setSlotTime(item.time)}
+                        className={`py-2 rounded-xl text-sm font-medium transition-all duration-150 border text-center
+                          ${
+                            item.time === slotTime
+                              ? "bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-100"
+                              : "text-gray-500 border-gray-200 bg-white hover:border-indigo-300 hover:text-indigo-600"
+                          }`}
+                      >
+                        {item.time.toLowerCase()}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
@@ -291,15 +303,15 @@ const Appointment = () => {
                 <div className="mt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   {slotTime && (
                     <p className="text-sm text-gray-500">
-                      Booking for{" "}
                       <span className="font-medium text-gray-800">
-                        {
-                          daysOfWeek[
-                            docSlots[slotIndex]?.[0]?.datetime.getDay()
-                          ]
-                        }
-                        , {docSlots[slotIndex]?.[0]?.datetime.getDate()} at{" "}
-                        {slotTime.toLowerCase()}
+                        {(() => {
+                          const selected = docSlots[slotIndex]?.find(
+                            (s) => s.time === slotTime,
+                          )?.datetime;
+                          return selected
+                            ? `Appointment on ${selected.toLocaleDateString("en-US", { weekday: "long" })}, ${selected.toLocaleDateString("en-US", { month: "long", day: "numeric" })} at ${slotTime}`
+                            : "";
+                        })()}
                       </span>
                     </p>
                   )}

@@ -25,6 +25,7 @@ const MyProfile = () => {
   const [isEdit, setIsEdit] = useState(false);
   const [image, setImage] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [viewingImage, setViewingImage] = useState(false); // ✅ lightbox state
 
   const initials = userData?.name
     ? userData.name
@@ -75,8 +76,37 @@ const MyProfile = () => {
 
   if (!userData) return null;
 
+  const currentImageSrc = image
+    ? URL.createObjectURL(image)
+    : userData.image || null;
+
   return (
     <div className="min-h-screen bg-zinc-50 px-4 py-8 sm:px-6 lg:px-10">
+      {/* ✅ Image lightbox overlay */}
+      {viewingImage && currentImageSrc && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+          onClick={() => setViewingImage(false)}
+        >
+          <div
+            className="relative w-52 h-52 sm:w-64 sm:h-64"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={currentImageSrc}
+              alt={userData.name}
+              className="w-full h-full rounded-full object-cover border-4 border-white shadow-2xl"
+            />
+            <button
+              onClick={() => setViewingImage(false)}
+              className="absolute -top-2 -right-2 w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-md hover:bg-zinc-100 transition"
+            >
+              <X size={14} className="text-zinc-600" />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-5xl mx-auto">
         {/* Page heading */}
         <div className="mb-6">
@@ -94,21 +124,23 @@ const MyProfile = () => {
           <div className="lg:col-span-2 bg-white border border-zinc-200 rounded-2xl overflow-hidden text-sm">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-5 px-6 py-6 border-b border-zinc-100">
-              {/* Avatar */}
-              <div className="relative shrink-0 self-start sm:self-auto">
+              {/* ✅ Avatar — centered on mobile, left on sm+ */}
+              <div className="relative shrink-0 self-center sm:self-auto">
                 {isEdit ? (
                   <label htmlFor="image" className="cursor-pointer group block">
                     <div className="relative w-20 h-20 sm:w-24 sm:h-24">
-                      <img
-                        src={
-                          image
-                            ? URL.createObjectURL(image)
-                            : userData.image || ""
-                        }
-                        alt={userData.name}
-                        className="w-full h-full rounded-2xl object-cover border border-zinc-200 opacity-80 group-hover:opacity-60 transition"
-                      />
-                      <div className="absolute inset-0 rounded-2xl flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition">
+                      {currentImageSrc ? (
+                        <img
+                          src={currentImageSrc}
+                          alt={userData.name}
+                          className="w-full h-full rounded-full object-cover border-2 border-zinc-200 opacity-80 group-hover:opacity-60 transition"
+                        />
+                      ) : (
+                        <div className="w-full h-full rounded-full bg-blue-50 flex items-center justify-center text-blue-600 text-3xl font-medium border-2 border-zinc-200 opacity-80 group-hover:opacity-60 transition">
+                          {initials}
+                        </div>
+                      )}
+                      <div className="absolute inset-0 rounded-full flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition">
                         <Camera size={20} className="text-white drop-shadow" />
                       </div>
                     </div>
@@ -120,24 +152,39 @@ const MyProfile = () => {
                       onChange={(e) => setImage(e.target.files[0])}
                     />
                   </label>
-                ) : userData.image ? (
-                  <img
-                    src={userData.image}
-                    alt={userData.name}
-                    className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border border-zinc-200"
-                  />
+                ) : currentImageSrc ? (
+                  // ✅ Click to view image in lightbox
+                  <button
+                    onClick={() => setViewingImage(true)}
+                    className="group relative block w-20 h-20 sm:w-24 sm:h-24 rounded-full focus:outline-none"
+                    title="View photo"
+                  >
+                    <img
+                      src={currentImageSrc}
+                      alt={userData.name}
+                      className="w-full h-full rounded-full object-cover border-2 border-zinc-200 group-hover:border-indigo-300 transition"
+                    />
+                    <div className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/20 transition flex items-center justify-center">
+                      <span className="opacity-0 group-hover:opacity-100 transition text-white text-[10px] font-medium">
+                        View
+                      </span>
+                    </div>
+                  </button>
                 ) : (
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 text-3xl font-medium border border-zinc-200">
+                  // No image — just show initials, no lightbox
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 text-3xl font-medium border-2 border-zinc-200">
                     {initials}
                   </div>
                 )}
+
+                {/* Online dot */}
                 {!isEdit && (
-                  <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-white" />
+                  <span className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 bg-green-400 rounded-full border-2 border-white" />
                 )}
               </div>
 
-              {/* Name + badges */}
-              <div className="flex-1 min-w-0">
+              {/* Name + badges — centered on mobile */}
+              <div className="flex-1 min-w-0 text-center sm:text-left">
                 {isEdit ? (
                   <input
                     className="text-2xl font-semibold text-neutral-800 w-full bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-1.5 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50 transition"
@@ -152,7 +199,7 @@ const MyProfile = () => {
                     {userData.name}
                   </p>
                 )}
-                <div className="flex flex-wrap items-center gap-3 mt-2">
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 mt-2">
                   <span className="inline-flex items-center gap-1 text-xs text-green-600 bg-green-50 border border-green-100 rounded-full px-2.5 py-0.5 font-medium">
                     <BadgeCheck size={12} /> Verified account
                   </span>
