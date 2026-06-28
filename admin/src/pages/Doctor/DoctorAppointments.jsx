@@ -229,7 +229,7 @@ const DoctorAppointments = () => {
 
   return (
     <>
-      <Toaster position="top-right" />
+      <Toaster position="top-center" />
 
       {/* Confirmation Modal */}
       <ConfirmModal
