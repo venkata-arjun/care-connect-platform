@@ -459,13 +459,11 @@ const DoctorAppointments = () => {
                     </div>
                   </div>
 
-                  {item.cancelled || item.isCompleted ? (
+                  {(item.cancelled || item.isCompleted) && (
                     <StatusBadge
                       cancelled={item.cancelled}
                       completed={item.isCompleted}
                     />
-                  ) : (
-                    <PaymentBadge online={item.payment} />
                   )}
                 </div>
 

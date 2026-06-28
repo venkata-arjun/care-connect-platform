@@ -247,7 +247,7 @@ const AddDoctor = () => {
               onChange={(e) => setExperience(e.target.value)}
               className="text-sm text-gray-800 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100 transition w-full appearance-none cursor-pointer"
             >
-              {[...Array(10)].map((_, i) => (
+              {[...Array(20)].map((_, i) => (
                 <option key={i + 1} value={`${i + 1} Year`}>
                   {i + 1} Year
                 </option>
