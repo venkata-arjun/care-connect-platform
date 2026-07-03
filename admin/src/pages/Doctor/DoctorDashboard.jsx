@@ -13,6 +13,7 @@ import {
   Check,
   X,
   Calendar,
+  AlertTriangle,
 } from "lucide-react";
 
 const StatCard = ({ icon: Icon, iconBg, iconColor, value, label }) => (
@@ -28,6 +29,29 @@ const StatCard = ({ icon: Icon, iconBg, iconColor, value, label }) => (
     </div>
   </div>
 );
+
+/* ── Status badge ── */
+const StatusBadge = ({ cancelled, completed, missed }) => {
+  if (cancelled)
+    return (
+      <span className="flex items-center gap-1 text-[11px] font-semibold text-red-500 bg-red-50 border border-red-100 px-2.5 py-1 rounded-full shrink-0">
+        <XCircle className="w-3 h-3" /> Cancelled
+      </span>
+    );
+  if (completed)
+    return (
+      <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-full shrink-0">
+        <CheckCircle2 className="w-3 h-3" /> Completed
+      </span>
+    );
+  if (missed)
+    return (
+      <span className="flex items-center gap-1 text-[11px] font-semibold text-amber-600 bg-amber-50 border border-amber-100 px-2.5 py-1 rounded-full shrink-0">
+        <AlertTriangle className="w-3 h-3" /> Missed
+      </span>
+    );
+  return null;
+};
 
 /* ── Confirmation Modal ── */
 const ConfirmModal = ({ open, onClose, onConfirm, type, patientName }) => {
@@ -127,6 +151,36 @@ const DoctorDashboard = () => {
     if (dToken) getDashData();
   }, [dToken]);
 
+  /* ── Determine if a given slotDate + slotTime is already in the past ──
+     slotDate format: "DD_MM_YYYY"
+     slotTime format: "hh:mm am/pm" (e.g. "11:00 am") */
+  const isPastSlot = (slotDate, slotTime) => {
+    try {
+      const [day, month, year] = slotDate.split("_").map(Number);
+
+      const timeMatch = slotTime?.trim().match(/(\d+):(\d+)\s*(am|pm)/i);
+      if (!timeMatch) return false;
+
+      let [, hours, minutes, meridiem] = timeMatch;
+      hours = Number(hours);
+      minutes = Number(minutes);
+
+      if (meridiem.toLowerCase() === "pm" && hours !== 12) hours += 12;
+      if (meridiem.toLowerCase() === "am" && hours === 12) hours = 0;
+
+      const slotDateTime = new Date(year, month - 1, day, hours, minutes);
+      return slotDateTime.getTime() < Date.now();
+    } catch (err) {
+      console.log(err);
+      return false;
+    }
+  };
+
+  const isMissed = (item) =>
+    !item.cancelled &&
+    !item.isCompleted &&
+    isPastSlot(item.slotDate, item.slotTime);
+
   const requestCancel = (id, patientName) =>
     setConfirm({ open: true, type: "cancel", id, patientName });
 
@@ -210,64 +264,66 @@ const DoctorDashboard = () => {
                 <p className="text-sm font-medium">No bookings yet</p>
               </div>
             ) : (
-              dashData.latestAppointments.map((item, index) => (
-                <div
-                  key={index}
-                  className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50/80 transition-colors duration-150"
-                >
-                  {/* Avatar */}
-                  <img
-                    className="w-10 h-10 rounded-full object-cover ring-2 ring-white shadow-sm shrink-0"
-                    src={item.userData.image}
-                    alt={item.userData.name}
-                  />
+              dashData.latestAppointments.map((item, index) => {
+                const missed = isMissed(item);
 
-                  {/* Name + Date */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-800 truncate">
-                      {item.userData.name}
-                    </p>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <Calendar className="w-3 h-3 text-gray-400 shrink-0" />
-                      <p className="text-xs text-gray-400">
-                        {slotDateFormat(item.slotDate)}
+                return (
+                  <div
+                    key={index}
+                    className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50/80 transition-colors duration-150"
+                  >
+                    {/* Avatar */}
+                    <img
+                      className="w-10 h-10 rounded-full object-cover ring-2 ring-white shadow-sm shrink-0"
+                      src={item.userData.image}
+                      alt={item.userData.name}
+                    />
+
+                    {/* Name + Date */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-800 truncate">
+                        {item.userData.name}
                       </p>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <Calendar className="w-3 h-3 text-gray-400 shrink-0" />
+                        <p className="text-xs text-gray-400">
+                          {slotDateFormat(item.slotDate)}
+                        </p>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Status / Actions */}
-                  {item.cancelled ? (
-                    <span className="flex items-center gap-1 text-[11px] font-semibold text-red-500 bg-red-50 border border-red-100 px-2.5 py-1 rounded-full shrink-0">
-                      <XCircle className="w-3 h-3" /> Cancelled
-                    </span>
-                  ) : item.isCompleted ? (
-                    <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-full shrink-0">
-                      <CheckCircle2 className="w-3 h-3" /> Completed
-                    </span>
-                  ) : (
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        onClick={() =>
-                          requestCancel(item._id, item.userData.name)
-                        }
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-red-500 bg-red-50 border border-red-100 hover:bg-red-100 active:scale-95 transition-all"
-                      >
-                        <X className="w-3 h-3" />
-                        <span className="hidden sm:inline">Cancel</span>
-                      </button>
-                      <button
-                        onClick={() =>
-                          requestComplete(item._id, item.userData.name)
-                        }
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-emerald-600 bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 active:scale-95 transition-all"
-                      >
-                        <Check className="w-3 h-3" />
-                        <span className="hidden sm:inline">Done</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))
+                    {/* Status / Actions */}
+                    {item.cancelled || item.isCompleted || missed ? (
+                      <StatusBadge
+                        cancelled={item.cancelled}
+                        completed={item.isCompleted}
+                        missed={missed}
+                      />
+                    ) : (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          onClick={() =>
+                            requestCancel(item._id, item.userData.name)
+                          }
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-red-500 bg-red-50 border border-red-100 hover:bg-red-100 active:scale-95 transition-all"
+                        >
+                          <X className="w-3 h-3" />
+                          <span className="hidden sm:inline">Cancel</span>
+                        </button>
+                        <button
+                          onClick={() =>
+                            requestComplete(item._id, item.userData.name)
+                          }
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-emerald-600 bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 active:scale-95 transition-all"
+                        >
+                          <Check className="w-3 h-3" />
+                          <span className="hidden sm:inline">Done</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
         </div>

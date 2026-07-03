@@ -13,6 +13,7 @@ import {
   CheckCircle,
   CheckCircle2,
   XCircle,
+  AlertTriangle,
 } from "lucide-react";
 
 /* ── Confirmation Modal ── */
@@ -130,6 +131,31 @@ const MyAppointments = () => {
     return (
       dateArray[0] + " " + months[Number(dateArray[1]) - 1] + " " + dateArray[2]
     );
+  };
+
+  /* ── Determine if a given slotDate + slotTime is already in the past ──
+     slotDate format: "DD_MM_YYYY"
+     slotTime format: "hh:mm am/pm" (e.g. "11:00 am") */
+  const isPastSlot = (slotDate, slotTime) => {
+    try {
+      const [day, month, year] = slotDate.split("_").map(Number);
+
+      const timeMatch = slotTime.trim().match(/(\d+):(\d+)\s*(am|pm)/i);
+      if (!timeMatch) return false;
+
+      let [, hours, minutes, meridiem] = timeMatch;
+      hours = Number(hours);
+      minutes = Number(minutes);
+
+      if (meridiem.toLowerCase() === "pm" && hours !== 12) hours += 12;
+      if (meridiem.toLowerCase() === "am" && hours === 12) hours = 0;
+
+      const slotDateTime = new Date(year, month - 1, day, hours, minutes);
+      return slotDateTime.getTime() < Date.now();
+    } catch (err) {
+      console.log(err);
+      return false;
+    }
   };
 
   const getUserAppointments = async () => {
@@ -277,143 +303,163 @@ const MyAppointments = () => {
 
       {/* ── Appointment cards ── */}
       <div className="flex flex-col gap-4">
-        {appointments.map((item, index) => (
-          <div
-            key={index}
-            className="bg-white border border-zinc-200 rounded-2xl overflow-hidden"
-          >
-            {/* Status colour bar */}
+        {appointments.map((item, index) => {
+          const expired =
+            !item.cancelled &&
+            !item.isCompleted &&
+            isPastSlot(item.slotDate, item.slotTime);
+
+          return (
             <div
-              className={`h-[3px] w-full ${
-                item.cancelled
-                  ? "bg-red-400"
-                  : item.isCompleted
-                    ? "bg-emerald-400"
-                    : "bg-indigo-400"
-              }`}
-            />
+              key={index}
+              className="bg-white border border-zinc-200 rounded-2xl overflow-hidden"
+            >
+              {/* Status colour bar */}
+              <div
+                className={`h-[3px] w-full ${
+                  item.cancelled
+                    ? "bg-red-400"
+                    : item.isCompleted
+                      ? "bg-emerald-400"
+                      : expired
+                        ? "bg-amber-400"
+                        : "bg-indigo-400"
+                }`}
+              />
 
-            {/* Card body */}
-            <div className="flex flex-col sm:flex-row gap-4 p-4 sm:p-5">
-              <div className="shrink-0 flex justify-center sm:justify-start">
-                <img
-                  className="w-24 h-24 sm:w-[88px] sm:h-[88px] rounded-xl object-cover bg-indigo-50"
-                  src={item.docData.image}
-                  alt={item.docData.name}
-                />
-              </div>
-
-              <div className="flex-1 min-w-0 flex flex-col justify-center gap-2">
-                <div>
-                  <p className="font-semibold text-neutral-800 text-base leading-tight">
-                    {item.docData.name}
-                  </p>
-                  <span className="inline-flex items-center gap-1 text-[11px] text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-full px-2 py-0.5 mt-1.5 font-medium">
-                    <Stethoscope size={10} />
-                    {item.docData.speciality}
-                  </span>
-                </div>
-
-                <div className="flex items-start gap-1.5">
-                  <MapPin
-                    size={12}
-                    className="text-zinc-400 mt-[3px] shrink-0"
+              {/* Card body */}
+              <div className="flex flex-col sm:flex-row gap-4 p-4 sm:p-5">
+                <div className="shrink-0 flex justify-center sm:justify-start">
+                  <img
+                    onClick={() => navigate(`/appointment/${item.docId}`)}
+                    className="w-24 h-24 sm:w-[88px] sm:h-[88px] rounded-xl object-cover bg-indigo-50 cursor-pointer hover:scale-105 transition-transform duration-200"
+                    src={item.docData.image}
+                    alt={item.docData.name}
                   />
-                  <p className="text-xs text-zinc-500 leading-relaxed">
-                    {item.docData.address.line1}, {item.docData.address.line2}
-                  </p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                  <div className="flex items-center gap-1.5">
-                    <CalendarDays
-                      size={12}
-                      className="text-zinc-400 shrink-0"
-                    />
-                    <span className="text-xs text-zinc-600 font-medium">
-                      {slotDateFormat(item.slotDate)}
+                <div className="flex-1 min-w-0 flex flex-col justify-center gap-2">
+                  <div>
+                    <p className="font-semibold text-neutral-800 text-base leading-tight">
+                      {item.docData.name}
+                    </p>
+                    <span className="inline-flex items-center gap-1 text-[11px] text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-full px-2 py-0.5 mt-1.5 font-medium">
+                      <Stethoscope size={10} />
+                      {item.docData.speciality}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <Clock size={12} className="text-zinc-400 shrink-0" />
-                    <span className="text-xs text-zinc-600 font-medium">
-                      {item.slotTime}
-                    </span>
+
+                  <div className="flex items-start gap-1.5">
+                    <MapPin
+                      size={12}
+                      className="text-zinc-400 mt-[3px] shrink-0"
+                    />
+                    <p className="text-xs text-zinc-500 leading-relaxed">
+                      {item.docData.address.line1}, {item.docData.address.line2}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <CalendarDays
+                        size={12}
+                        className="text-zinc-400 shrink-0"
+                      />
+                      <span className="text-xs text-zinc-600 font-medium">
+                        {slotDateFormat(item.slotDate)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Clock size={12} className="text-zinc-400 shrink-0" />
+                      <span className="text-xs text-zinc-600 font-medium">
+                        {item.slotTime}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Divider */}
-            <div className="h-px bg-zinc-100 mx-4 sm:mx-5" />
+              {/* Divider */}
+              <div className="h-px bg-zinc-100 mx-4 sm:mx-5" />
 
-            {/* ── Action / Status footer ── */}
-            <div className="flex flex-col sm:flex-row gap-3 p-4 sm:p-5">
-              {/* 1. COMPLETED */}
-              {item.isCompleted && (
-                <div className="flex-1 flex items-center justify-center gap-2 text-sm font-medium text-emerald-600 border border-emerald-200 bg-emerald-50 rounded-xl py-2.5">
-                  <CheckCircle2 size={14} />
-                  Appointment Completed
-                </div>
-              )}
+              {/* ── Action / Status footer ── */}
+              <div className="flex flex-col sm:flex-row gap-3 p-4 sm:p-5">
+                {/* 1. COMPLETED */}
+                {item.isCompleted && (
+                  <div className="flex-1 flex items-center justify-center gap-2 text-sm font-medium text-emerald-600 border border-emerald-200 bg-emerald-50 rounded-xl py-2.5">
+                    <CheckCircle2 size={14} />
+                    Appointment Completed
+                  </div>
+                )}
 
-              {/* 2. CANCELLED */}
-              {item.cancelled && (
-                <div className="flex-1 flex items-center justify-center gap-2 text-sm font-medium text-red-400 border border-red-100 bg-red-50 rounded-xl py-2.5">
-                  <X size={14} />
-                  Appointment Cancelled
-                </div>
-              )}
+                {/* 2. CANCELLED */}
+                {item.cancelled && (
+                  <div className="flex-1 flex items-center justify-center gap-2 text-sm font-medium text-red-400 border border-red-100 bg-red-50 rounded-xl py-2.5">
+                    <X size={14} />
+                    Appointment Cancelled
+                  </div>
+                )}
 
-              {/* 3. ACTIVE */}
-              {!item.cancelled && !item.isCompleted && (
-                <>
-                  {/* Already paid */}
-                  {item.payment && (
-                    <div className="flex-1 flex items-center justify-center gap-2 text-sm font-medium text-emerald-600 border border-emerald-200 bg-emerald-50 rounded-xl py-2.5">
-                      <CheckCircle size={14} />
-                      Paid
-                    </div>
-                  )}
+                {/* 3. EXPIRED / MISSED — date has passed, never paid/cancelled/completed */}
+                {expired && (
+                  <div className="flex-1 flex items-center justify-center gap-2 text-sm font-medium text-amber-600 border border-amber-200 bg-amber-50 rounded-xl py-2.5">
+                    <AlertTriangle size={14} />
+                    {item.payment
+                      ? "Paid • Awaiting Update"
+                      : "Missed Appointment"}
+                  </div>
+                )}
 
-                  {/* Pay Online → opens modal */}
-                  {!item.payment && (
+                {/* 4. ACTIVE (upcoming, unresolved) */}
+                {!item.cancelled && !item.isCompleted && !expired && (
+                  <>
+                    {/* Already paid */}
+                    {item.payment && (
+                      <div className="flex-1 flex items-center justify-center gap-2 text-sm font-medium text-emerald-600 border border-emerald-200 bg-emerald-50 rounded-xl py-2.5">
+                        <CheckCircle size={14} />
+                        Paid
+                      </div>
+                    )}
+
+                    {/* Pay Online → opens modal */}
+                    {!item.payment && (
+                      <button
+                        onClick={() =>
+                          setConfirm({
+                            open: true,
+                            type: "pay",
+                            appointmentId: item._id,
+                            doctorName: item.docData.name,
+                          })
+                        }
+                        className="flex-1 flex items-center justify-center gap-2 text-sm font-medium text-indigo-600 border border-indigo-200 rounded-xl py-2.5 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all duration-200"
+                      >
+                        <CreditCard size={14} />
+                        Pay Online
+                      </button>
+                    )}
+
+                    {/* Cancel → opens modal */}
                     <button
                       onClick={() =>
                         setConfirm({
                           open: true,
-                          type: "pay",
+                          type: "cancel",
                           appointmentId: item._id,
                           doctorName: item.docData.name,
                         })
                       }
-                      className="flex-1 flex items-center justify-center gap-2 text-sm font-medium text-indigo-600 border border-indigo-200 rounded-xl py-2.5 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all duration-200"
+                      className="flex-1 flex items-center justify-center gap-2 text-sm font-medium text-zinc-500 border border-zinc-200 rounded-xl py-2.5 hover:bg-red-500 hover:text-white hover:border-red-500 transition-all duration-200"
                     >
-                      <CreditCard size={14} />
-                      Pay Online
+                      <X size={14} />
+                      Cancel
                     </button>
-                  )}
-
-                  {/* Cancel → opens modal */}
-                  <button
-                    onClick={() =>
-                      setConfirm({
-                        open: true,
-                        type: "cancel",
-                        appointmentId: item._id,
-                        doctorName: item.docData.name,
-                      })
-                    }
-                    className="flex-1 flex items-center justify-center gap-2 text-sm font-medium text-zinc-500 border border-zinc-200 rounded-xl py-2.5 hover:bg-red-500 hover:text-white hover:border-red-500 transition-all duration-200"
-                  >
-                    <X size={14} />
-                    Cancel
-                  </button>
-                </>
-              )}
+                  </>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

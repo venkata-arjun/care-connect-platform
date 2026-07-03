@@ -2,7 +2,7 @@ import React, { useContext, useEffect, useState } from "react";
 import { DoctorContext } from "../../context/DoctorContext";
 import { AppContext } from "../../context/AppContext";
 import { assets } from "../../assets/assets";
-import toast, { Toaster } from "react-hot-toast";
+import toast from "react-hot-toast";
 import {
   Calendar,
   Clock,
@@ -19,6 +19,7 @@ import {
   ArrowUp,
   ArrowDown,
   AlertTriangle,
+  Ban,
 } from "lucide-react";
 
 /* ── Avatar ── */
@@ -31,6 +32,7 @@ const Avatar = ({ src, alt, size = "w-10 h-10" }) => (
   />
 );
 
+/* ── Base payment badge (Cash / Online) ── */
 const PaymentBadge = ({ online }) => (
   <div
     className={`inline-flex items-center gap-1.5 text-sm font-medium ${
@@ -46,18 +48,55 @@ const PaymentBadge = ({ online }) => (
   </div>
 );
 
+/* ── Payment status (context-aware) ──
+   - Completed / pending: show badge as normal (Cash or Online)
+   - Cancelled / Missed:
+       - Online → still show "Paid Online" (money wasn't refunded)
+       - Cash   → nothing to show, cash was never collected */
+const PaymentStatus = ({ item, missed }) => {
+  const isVoid = item.cancelled || missed;
+
+  if (isVoid) {
+    if (!item.payment) {
+      // cash never collected — show a muted "not paid" indicator
+      // (never return null here: an empty grid cell collapses and
+      // shifts every column after it to the left)
+      return (
+        <div className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-400">
+          <Ban className="w-4 h-4" />
+          <span>Not Paid</span>
+        </div>
+      );
+    }
+    return (
+      <div className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600">
+        <CreditCard className="w-4 h-4" />
+        <span>Paid Online</span>
+      </div>
+    );
+  }
+
+  return <PaymentBadge online={item.payment} />;
+};
+
 /* ── Status badge ── */
-const StatusBadge = ({ cancelled, completed }) => {
+const StatusBadge = ({ cancelled, completed, missed }) => {
   if (cancelled)
     return (
-      <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-500 bg-red-50 border border-red-200 px-3 py-1 rounded-lg">
+      <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-500">
         <XCircle className="w-3.5 h-3.5" /> Cancelled
       </span>
     );
   if (completed)
     return (
-      <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-lg">
+      <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600">
         <CheckCircle2 className="w-3.5 h-3.5" /> Completed
+      </span>
+    );
+  if (missed)
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600">
+        <AlertTriangle className="w-3.5 h-3.5" /> Missed
       </span>
     );
   return null;
@@ -176,6 +215,36 @@ const DoctorAppointments = () => {
     if (dToken) getAppointments();
   }, [dToken]);
 
+  /* ── Determine if a given slotDate + slotTime is already in the past ──
+     slotDate format: "DD_MM_YYYY"
+     slotTime format: "hh:mm am/pm" (e.g. "11:00 am") */
+  const isPastSlot = (slotDate, slotTime) => {
+    try {
+      const [day, month, year] = slotDate.split("_").map(Number);
+
+      const timeMatch = slotTime?.trim().match(/(\d+):(\d+)\s*(am|pm)/i);
+      if (!timeMatch) return false;
+
+      let [, hours, minutes, meridiem] = timeMatch;
+      hours = Number(hours);
+      minutes = Number(minutes);
+
+      if (meridiem.toLowerCase() === "pm" && hours !== 12) hours += 12;
+      if (meridiem.toLowerCase() === "am" && hours === 12) hours = 0;
+
+      const slotDateTime = new Date(year, month - 1, day, hours, minutes);
+      return slotDateTime.getTime() < Date.now();
+    } catch (err) {
+      console.log(err);
+      return false;
+    }
+  };
+
+  const isMissed = (item) =>
+    !item.cancelled &&
+    !item.isCompleted &&
+    isPastSlot(item.slotDate, item.slotTime);
+
   // Opens the modal instead of acting directly
   const requestCancel = (id, patientName) =>
     setConfirm({ open: true, type: "cancel", id, patientName });
@@ -229,8 +298,6 @@ const DoctorAppointments = () => {
 
   return (
     <>
-      <Toaster position="top-center" />
-
       {/* Confirmation Modal */}
       <ConfirmModal
         open={confirm.open}
@@ -323,90 +390,95 @@ const DoctorAppointments = () => {
             {filtered.length === 0 ? (
               <EmptyState />
             ) : (
-              filtered.map((item, index) => (
-                <div
-                  key={index}
-                  className="grid grid-cols-[40px_1.8fr_110px_70px_140px_140px_90px_120px] gap-x-3 items-center py-3.5 px-5 hover:bg-slate-50/80 transition-colors duration-150"
-                >
-                  <p className="text-sm text-gray-400 font-medium">
-                    {index + 1}
-                  </p>
+              filtered.map((item, index) => {
+                const missed = isMissed(item);
 
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <Avatar
-                      src={item.userData.image}
-                      alt={item.userData.name}
-                      size="w-8 h-8"
-                    />
-                    <p className="text-sm font-semibold text-gray-800 truncate">
-                      {item.userData.name}
+                return (
+                  <div
+                    key={index}
+                    className="grid grid-cols-[40px_1.8fr_110px_70px_140px_140px_90px_120px] gap-x-3 items-center py-3.5 px-5 hover:bg-slate-50/80 transition-colors duration-150"
+                  >
+                    <p className="text-sm text-gray-400 font-medium">
+                      {index + 1}
                     </p>
-                  </div>
 
-                  <PaymentBadge online={item.payment} />
-
-                  <p className="text-sm text-gray-600">
-                    {calculateAge(item.userData.dob) !== "-"
-                      ? `${calculateAge(item.userData.dob)}y`
-                      : "—"}
-                  </p>
-
-                  <div className="flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                    <span className="text-sm text-gray-700">
-                      {slotDateFormat(item.slotDate)}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                    <span className="text-sm text-gray-700">
-                      {item.slotTime}
-                    </span>
-                  </div>
-
-                  <p className="text-sm font-bold text-gray-800">
-                    {currency}
-                    {item.amount}
-                  </p>
-
-                  {item.cancelled || item.isCompleted ? (
-                    <StatusBadge
-                      cancelled={item.cancelled}
-                      completed={item.isCompleted}
-                    />
-                  ) : (
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() =>
-                          requestCancel(item._id, item.userData.name)
-                        }
-                        className="p-1.5 rounded-lg hover:bg-red-50 transition-colors"
-                        title="Cancel"
-                      >
-                        <img
-                          className="w-7 h-7"
-                          src={assets.cancel_icon}
-                          alt="Cancel"
-                        />
-                      </button>
-                      <button
-                        onClick={() =>
-                          requestComplete(item._id, item.userData.name)
-                        }
-                        className="p-1.5 rounded-lg hover:bg-emerald-50 transition-colors"
-                        title="Complete"
-                      >
-                        <img
-                          className="w-7 h-7"
-                          src={assets.tick_icon}
-                          alt="Complete"
-                        />
-                      </button>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Avatar
+                        src={item.userData.image}
+                        alt={item.userData.name}
+                        size="w-8 h-8"
+                      />
+                      <p className="text-sm font-semibold text-gray-800 truncate">
+                        {item.userData.name}
+                      </p>
                     </div>
-                  )}
-                </div>
-              ))
+
+                    <PaymentStatus item={item} missed={missed} />
+
+                    <p className="text-sm text-gray-600">
+                      {calculateAge(item.userData.dob) !== "-"
+                        ? `${calculateAge(item.userData.dob)}y`
+                        : "—"}
+                    </p>
+
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                      <span className="text-sm text-gray-700">
+                        {slotDateFormat(item.slotDate)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                      <span className="text-sm text-gray-700">
+                        {item.slotTime}
+                      </span>
+                    </div>
+
+                    <p className="text-sm font-bold text-gray-800">
+                      {currency}
+                      {item.amount}
+                    </p>
+
+                    {item.cancelled || item.isCompleted || missed ? (
+                      <StatusBadge
+                        cancelled={item.cancelled}
+                        completed={item.isCompleted}
+                        missed={missed}
+                      />
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() =>
+                            requestCancel(item._id, item.userData.name)
+                          }
+                          className="p-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                          title="Cancel"
+                        >
+                          <img
+                            className="w-7 h-7"
+                            src={assets.cancel_icon}
+                            alt="Cancel"
+                          />
+                        </button>
+                        <button
+                          onClick={() =>
+                            requestComplete(item._id, item.userData.name)
+                          }
+                          className="p-1.5 rounded-lg hover:bg-emerald-50 transition-colors"
+                          title="Complete"
+                        >
+                          <img
+                            className="w-7 h-7"
+                            src={assets.tick_icon}
+                            alt="Complete"
+                          />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
@@ -418,122 +490,132 @@ const DoctorAppointments = () => {
               <EmptyState />
             </div>
           ) : (
-            filtered.map((item, index) => (
-              <div
-                key={index}
-                className="bg-white rounded-2xl overflow-hidden"
-                style={{
-                  border: "1px solid #e8edf3",
-                  boxShadow: "0 1px 6px rgba(0,0,0,0.06)",
-                }}
-              >
-                <div
-                  className={`h-[3px] w-full ${
-                    item.cancelled
-                      ? "bg-red-400"
-                      : item.isCompleted
-                        ? "bg-emerald-400"
-                        : "bg-primary"
-                  }`}
-                />
+            filtered.map((item, index) => {
+              const missed = isMissed(item);
 
-                <div className="flex items-center justify-between px-4 pt-3.5 pb-3 gap-2">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <Avatar
-                      src={item.userData.image}
-                      alt={item.userData.name}
-                      size="w-11 h-11"
-                    />
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-gray-800 truncate">
-                        {item.userData.name}
-                      </p>
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <User className="w-3 h-3 text-gray-400 shrink-0" />
-                        <span className="text-xs text-gray-400">
-                          {calculateAge(item.userData.dob) !== "-"
-                            ? `${calculateAge(item.userData.dob)} yrs`
-                            : "Age N/A"}
-                        </span>
+              return (
+                <div
+                  key={index}
+                  className="bg-white rounded-2xl overflow-hidden"
+                  style={{
+                    border: "1px solid #e8edf3",
+                    boxShadow: "0 1px 6px rgba(0,0,0,0.06)",
+                  }}
+                >
+                  <div
+                    className={`h-[3px] w-full ${
+                      item.cancelled
+                        ? "bg-red-400"
+                        : item.isCompleted
+                          ? "bg-emerald-400"
+                          : missed
+                            ? "bg-amber-400"
+                            : "bg-primary"
+                    }`}
+                  />
+
+                  <div className="flex items-center justify-between px-4 pt-3.5 pb-3 gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Avatar
+                        src={item.userData.image}
+                        alt={item.userData.name}
+                        size="w-11 h-11"
+                      />
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-gray-800 truncate">
+                          {item.userData.name}
+                        </p>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <User className="w-3 h-3 text-gray-400 shrink-0" />
+                          <span className="text-xs text-gray-400">
+                            {calculateAge(item.userData.dob) !== "-"
+                              ? `${calculateAge(item.userData.dob)} yrs`
+                              : "Age N/A"}
+                          </span>
+                        </div>
                       </div>
                     </div>
+
+                    {(item.cancelled || item.isCompleted || missed) && (
+                      <StatusBadge
+                        cancelled={item.cancelled}
+                        completed={item.isCompleted}
+                        missed={missed}
+                      />
+                    )}
                   </div>
 
-                  {(item.cancelled || item.isCompleted) && (
-                    <StatusBadge
-                      cancelled={item.cancelled}
-                      completed={item.isCompleted}
-                    />
+                  <div className="mx-3 mb-3 rounded-xl bg-gray-50/80 border border-gray-100 px-4 py-3 grid grid-cols-3 divide-x divide-gray-100">
+                    <div className="flex flex-col gap-1 pr-3">
+                      <div className="flex items-center gap-1 text-gray-400">
+                        <Calendar className="w-3 h-3 shrink-0" />
+                        <span className="text-[10px] uppercase tracking-wider font-semibold">
+                          Date
+                        </span>
+                      </div>
+                      <p className="text-xs font-bold text-gray-700 leading-tight">
+                        {slotDateFormat(item.slotDate)}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col gap-1 px-3">
+                      <div className="flex items-center gap-1 text-gray-400">
+                        <Clock className="w-3 h-3 shrink-0" />
+                        <span className="text-[10px] uppercase tracking-wider font-semibold">
+                          Time
+                        </span>
+                      </div>
+                      <p className="text-xs font-bold text-gray-700">
+                        {item.slotTime}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col gap-1 pl-3">
+                      <div className="flex items-center gap-1 text-gray-400">
+                        <Banknote className="w-3 h-3 shrink-0" />
+                        <span className="text-[10px] uppercase tracking-wider font-semibold">
+                          Fee
+                        </span>
+                      </div>
+                      <p className="text-xs font-bold text-gray-700">
+                        {currency}
+                        {item.amount}
+                      </p>
+                    </div>
+                  </div>
+
+                  {!item.cancelled && !item.isCompleted && !missed && (
+                    <div className="flex items-center justify-between px-4 pb-3.5 gap-2">
+                      <PaymentStatus item={item} missed={missed} />
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() =>
+                            requestCancel(item._id, item.userData.name)
+                          }
+                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-red-500 bg-red-50 border border-red-100 hover:bg-red-100 active:scale-95 transition-all"
+                        >
+                          <X className="w-3.5 h-3.5" /> Cancel
+                        </button>
+                        <button
+                          onClick={() =>
+                            requestComplete(item._id, item.userData.name)
+                          }
+                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 active:scale-95 transition-all"
+                        >
+                          <Check className="w-3.5 h-3.5" /> Done
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {(missed || item.cancelled || item.isCompleted) && (
+                    <div className="flex items-center justify-between px-4 pb-3.5 gap-2">
+                      <PaymentStatus item={item} missed={missed} />
+                    </div>
                   )}
                 </div>
-
-                <div className="mx-3 mb-3 rounded-xl bg-gray-50/80 border border-gray-100 px-4 py-3 grid grid-cols-3 divide-x divide-gray-100">
-                  <div className="flex flex-col gap-1 pr-3">
-                    <div className="flex items-center gap-1 text-gray-400">
-                      <Calendar className="w-3 h-3 shrink-0" />
-                      <span className="text-[10px] uppercase tracking-wider font-semibold">
-                        Date
-                      </span>
-                    </div>
-                    <p className="text-xs font-bold text-gray-700 leading-tight">
-                      {slotDateFormat(item.slotDate)}
-                    </p>
-                  </div>
-
-                  <div className="flex flex-col gap-1 px-3">
-                    <div className="flex items-center gap-1 text-gray-400">
-                      <Clock className="w-3 h-3 shrink-0" />
-                      <span className="text-[10px] uppercase tracking-wider font-semibold">
-                        Time
-                      </span>
-                    </div>
-                    <p className="text-xs font-bold text-gray-700">
-                      {item.slotTime}
-                    </p>
-                  </div>
-
-                  <div className="flex flex-col gap-1 pl-3">
-                    <div className="flex items-center gap-1 text-gray-400">
-                      <Banknote className="w-3 h-3 shrink-0" />
-                      <span className="text-[10px] uppercase tracking-wider font-semibold">
-                        Fee
-                      </span>
-                    </div>
-                    <p className="text-xs font-bold text-gray-700">
-                      {currency}
-                      {item.amount}
-                    </p>
-                  </div>
-                </div>
-
-                {!item.cancelled && !item.isCompleted && (
-                  <div className="flex items-center justify-between px-4 pb-3.5 gap-2">
-                    <PaymentBadge online={item.payment} />
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() =>
-                          requestCancel(item._id, item.userData.name)
-                        }
-                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-red-500 bg-red-50 border border-red-100 hover:bg-red-100 active:scale-95 transition-all"
-                      >
-                        <X className="w-3.5 h-3.5" /> Cancel
-                      </button>
-                      <button
-                        onClick={() =>
-                          requestComplete(item._id, item.userData.name)
-                        }
-                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 active:scale-95 transition-all"
-                      >
-                        <Check className="w-3.5 h-3.5" /> Done
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {(item.cancelled || item.isCompleted) && (
-                  <div className="pb-1" />
-                )}
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
